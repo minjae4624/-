@@ -71,7 +71,7 @@ st.markdown("""
         text-align: center;
     }
 </style>
-""", unsafe_allow_allow_html=True)
+""", unsafe_allow_html=True)
 
 # 3. MBTI 데이터베이스 (이모지, 설명, 추천 직업, 핵심 역량)
 mbti_data = {
