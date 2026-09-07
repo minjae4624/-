@@ -1,3 +1,10 @@
+import streamlit as st
+import streamlit.components.v1 as components
+
+st.set_page_config(page_title="체인소맨 하이브리드", layout="wide")
+
+# r""" 사용으로 CSS 내 #ff0055 문법 에러 방지
+game_html = r"""
 <!DOCTYPE html>
 <html lang="ko">
 <head>
@@ -387,3 +394,6 @@
     </script>
 </body>
 </html>
+"""
+
+components.html(game_html, height=850, scrolling=False)
