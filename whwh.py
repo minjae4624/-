@@ -2,7 +2,7 @@
 <html lang="ko">
 <head>
     <meta charset="UTF-8">
-    <title>체인소맨: 픽셀 클래시</title>
+    <title>체인소맨 하이브리드</title>
     <style>
         body, html { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; background: #050505; font-family: sans-serif; color: #fff; user-select: none; }
         #canvas-container { width: 100vw; height: 100vh; position: absolute; top: 0; left: 0; display: flex; justify-content: center; align-items: center; }
@@ -30,7 +30,7 @@
         .trans-btn { border-color: #00ffcc; color: #00ffcc; }
         .ult-btn { border-color: #ff0055; background: rgba(255,0,85,0.4); }
 
-        /* 메뉴 */
+        /* 화면 선택 메뉴 */
         .screen { position: absolute; width: 100%; height: 100%; display: flex; flex-direction: column; justify-content: center; align-items: center; background: rgba(0,0,0,0.9); }
         h1 { font-size: 48px; color: #ff0033; text-shadow: 0 0 20px #ff0033; margin-bottom: 5px; }
         .btn { padding: 12px 30px; font-size: 18px; font-weight: bold; background: #ff0033; color: #fff; border: none; cursor: pointer; border-radius: 5px; box-shadow: 0 0 15px #ff0033; margin: 8px; }
@@ -44,7 +44,7 @@
         .card h3 { font-size: 13px; margin: 0; color: #fff; }
         .card p { font-size: 9px; color: #ffcc00; margin: 1px 0 0 0; }
 
-        /* 궁극기 컷씬 */
+        /* 궁극기 연출 컷씬 */
         #cutscene { display: none; position: absolute; width: 100%; height: 100%; background: rgba(0,0,0,0.95); z-index: 100; justify-content: center; align-items: center; flex-direction: column; }
         #cutscene-img { width: 280px; height: 280px; border-radius: 50%; border: 6px solid #ff0033; box-shadow: 0 0 60px #ff0033; background-size: cover; background-position: center; animation: zoomIn 0.3s ease-out; }
         #cutscene-text { font-size: 45px; color: #ff0033; font-weight: 900; text-shadow: 0 0 30px #ff0033; margin-top: 20px; animation: pulse 0.4s infinite alternate; }
@@ -76,7 +76,7 @@
         </div>
 
         <div id="main-screen" class="screen interactive">
-            <h1>체인소맨 PIXEL</h1>
+            <h1>체인소맨 하이브리드</h1>
             <p style="color:#aaa; margin-bottom: 20px;">픽셀 아트로 펼쳐지는 하이브리드 대전 격투</p>
             <button class="btn" onclick="goToModeSelect()">게임 시작</button>
         </div>
@@ -313,48 +313,39 @@
             document.getElementById('p2-ult').style.width = P2.ult + '%';
         }
 
-        /* 픽셀 아트 정교 디테일 렌더링 */
         function drawPixelCharacter(p) {
             ctx.save();
             ctx.translate(p.x, p.y);
             if (!p.facingRight) ctx.scale(-1, 1);
 
-            const scale = 4; // 픽셀 스케일
+            const scale = 4;
 
-            // 변신 시 오라
             if (p.isTransformed) {
                 ctx.fillStyle = 'rgba(255, 0, 50, 0.4)';
                 ctx.fillRect(-12 * scale, -28 * scale, 24 * scale, 30 * scale);
             }
 
-            // 다리 (바지)
             ctx.fillStyle = p.data.pants;
             ctx.fillRect(-5 * scale, -8 * scale, 4 * scale, 8 * scale);
             ctx.fillRect(1 * scale, -8 * scale, 4 * scale, 8 * scale);
 
-            // 몸통 (셔츠)
             ctx.fillStyle = p.data.shirt;
             ctx.fillRect(-6 * scale, -18 * scale, 12 * scale, 10 * scale);
 
-            // 얼굴 / 머리
             if (p.isTransformed && p.key === 'denji') {
-                // 체인소 악마 머리 픽셀
                 ctx.fillStyle = '#444444';
                 ctx.fillRect(-7 * scale, -27 * scale, 14 * scale, 9 * scale);
                 ctx.fillStyle = '#ff0033';
-                ctx.fillRect(-9 * scale, -25 * scale, 18 * scale, 3 * scale); // 체인소 톱날
+                ctx.fillRect(-9 * scale, -25 * scale, 18 * scale, 3 * scale);
             } else {
-                // 일반 얼굴 & 머리카락
                 ctx.fillStyle = '#ffdbac';
                 ctx.fillRect(-5 * scale, -25 * scale, 10 * scale, 7 * scale);
                 ctx.fillStyle = p.data.hair;
                 ctx.fillRect(-6 * scale, -28 * scale, 12 * scale, 5 * scale);
             }
 
-            // 팔 / 무기 연출
             ctx.fillStyle = p.isTransformed ? '#ff0000' : p.data.shirt;
             if (p.isAttacking) {
-                // 공격 모션 픽셀 이펙트
                 ctx.fillRect(4 * scale, -16 * scale, 16 * scale, 4 * scale);
                 ctx.fillStyle = '#ffff00';
                 ctx.fillRect(18 * scale, -20 * scale, 10 * scale, 12 * scale);
@@ -369,14 +360,12 @@
             if (selectedMap === 'hell') {
                 ctx.fillStyle = '#2b0000'; ctx.fillRect(0, 0, 960, 540);
                 ctx.fillStyle = '#660000'; ctx.fillRect(0, 420, 960, 120);
-                // 문 픽셀 하늘
                 ctx.fillStyle = '#ff3333';
                 for(let i=0; i<5; i++) ctx.fillRect(100 + i*180, 50, 60, 90);
             } else if (selectedMap === 'beach') {
                 ctx.fillStyle = '#0a192f'; ctx.fillRect(0, 0, 960, 540);
                 ctx.fillStyle = '#d2b48c'; ctx.fillRect(0, 420, 960, 120);
             } else {
-                // 도쿄 옥상
                 ctx.fillStyle = '#1a0933'; ctx.fillRect(0, 0, 960, 540);
                 ctx.fillStyle = '#ff5500'; ctx.fillRect(0, 300, 960, 120);
                 ctx.fillStyle = '#333333'; ctx.fillRect(0, 420, 960, 120);
