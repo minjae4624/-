@@ -3,7 +3,6 @@ import streamlit.components.v1 as components
 
 st.set_page_config(page_title="체인소맨 하이브리드", layout="wide")
 
-# r""" 사용으로 CSS 내 #ff0055 문법 에러 방지
 game_html = r"""
 <!DOCTYPE html>
 <html lang="ko">
@@ -32,8 +31,9 @@ game_html = r"""
         /* 조작 패널 */
         #touch-controls { display: none; position: absolute; bottom: 15px; width: 100%; padding: 0 20px; box-sizing: border-box; justify-content: space-between; z-index: 20; }
         .panel { background: rgba(0,0,0,0.8); border: 1px solid #444; border-radius: 10px; padding: 8px; display: flex; gap: 6px; }
-        .ctrl-btn { width: 50px; height: 50px; background: #222; border: 2px solid #fff; border-radius: 6px; color: #fff; font-size: 11px; font-weight: bold; display: flex; flex-direction: column; justify-content: center; align-items: center; cursor: pointer; }
+        .ctrl-btn { width: 48px; height: 48px; background: #222; border: 2px solid #fff; border-radius: 6px; color: #fff; font-size: 11px; font-weight: bold; display: flex; flex-direction: column; justify-content: center; align-items: center; cursor: pointer; }
         .ctrl-btn:active { background: #ff0033; }
+        .jump-btn { border-color: #ffcc00; color: #ffcc00; }
         .trans-btn { border-color: #00ffcc; color: #00ffcc; }
         .ult-btn { border-color: #ff0055; background: rgba(255,0,85,0.4); }
 
@@ -84,7 +84,7 @@ game_html = r"""
 
         <div id="main-screen" class="screen interactive">
             <h1>체인소맨 하이브리드</h1>
-            <p style="color:#aaa; margin-bottom: 20px;">픽셀 아트로 펼쳐지는 하이브리드 대전 격투</p>
+            <p style="color:#aaa; margin-bottom: 20px;">인간형 픽셀 아트 대전 격투</p>
             <button class="btn" onclick="goToModeSelect()">게임 시작</button>
         </div>
 
@@ -115,6 +115,7 @@ game_html = r"""
         <div class="panel">
             <div class="ctrl-btn" onclick="triggerAction('P1','LEFT')">◀<br>(A)</div>
             <div class="ctrl-btn" onclick="triggerAction('P1','RIGHT')">▶<br>(D)</div>
+            <div class="ctrl-btn jump-btn" onclick="triggerAction('P1','JUMP')">점프<br>(W)</div>
             <div class="ctrl-btn" onclick="triggerAction('P1','SKILL_A')">스킬1<br>(F)</div>
             <div class="ctrl-btn" onclick="triggerAction('P1','SKILL_B')">스킬2<br>(G)</div>
             <div class="ctrl-btn trans-btn" onclick="triggerAction('P1','TRANS')">변신<br>(V)</div>
@@ -123,6 +124,7 @@ game_html = r"""
         <div class="panel">
             <div class="ctrl-btn" onclick="triggerAction('P2','LEFT')">◀<br>(←)</div>
             <div class="ctrl-btn" onclick="triggerAction('P2','RIGHT')">▶<br>(→)</div>
+            <div class="ctrl-btn jump-btn" onclick="triggerAction('P2','JUMP')">점프<br>(↑)</div>
             <div class="ctrl-btn" onclick="triggerAction('P2','SKILL_A')">스킬1<br>(1)</div>
             <div class="ctrl-btn" onclick="triggerAction('P2','SKILL_B')">스킬2<br>(2)</div>
             <div class="ctrl-btn trans-btn" onclick="triggerAction('P2','TRANS')">변신<br>(0)</div>
@@ -149,6 +151,9 @@ game_html = r"""
         const canvas = document.getElementById('gameCanvas');
         const ctx = canvas.getContext('2d');
 
+        const GROUND_Y = 400; // 바닥 높이
+        const GRAVITY = 0.6; // 중력값
+
         let gameMode = '1P';
         let selectedCharP1 = 'denji', selectedCharP2 = 'power', selectedMap = 'city';
         let isGaming = false, isCutscene = false;
@@ -158,7 +163,8 @@ game_html = r"""
             return {
                 key: charKey, name: data.name, data: data,
                 isTransformed: false, hp: 100, ult: 0,
-                x: xPos, y: 380, vx: 0, facingRight: facingRight,
+                x: xPos, y: GROUND_Y, vx: 0, vy: 0,
+                isGrounded: true, facingRight: facingRight,
                 isAttacking: false, attackType: null, isAI: isAI, img: data.img
             };
         }
@@ -166,18 +172,36 @@ game_html = r"""
         let P1, P2;
         const keysPressed = {};
 
-        window.addEventListener('keydown', (e) => { keysPressed[e.key.toLowerCase()] = true; });
-        window.addEventListener('keyup', (e) => { keysPressed[e.key.toLowerCase()] = false; });
+        window.addEventListener('keydown', (e) => { 
+            keysPressed[e.key.toLowerCase()] = true; 
+            if (e.key === 'ArrowUp') keysPressed['arrowup'] = true;
+            if (e.key === 'ArrowLeft') keysPressed['arrowleft'] = true;
+            if (e.key === 'ArrowRight') keysPressed['arrowright'] = true;
+        });
+        window.addEventListener('keyup', (e) => { 
+            keysPressed[e.key.toLowerCase()] = false; 
+            if (e.key === 'ArrowUp') keysPressed['arrowup'] = false;
+            if (e.key === 'ArrowLeft') keysPressed['arrowleft'] = false;
+            if (e.key === 'ArrowRight') keysPressed['arrowright'] = false;
+        });
 
         function triggerAction(p, act) {
             if (!isGaming || isCutscene) return;
             const target = (p === 'P1') ? P1 : P2;
             const enemy = (p === 'P1') ? P2 : P1;
 
+            if (act === 'JUMP') playerJump(target);
             if (act === 'SKILL_A') executeSkill(target, enemy, 'SKILL_A', 7, 10);
             if (act === 'SKILL_B') executeSkill(target, enemy, 'SKILL_B', 10, 15);
             if (act === 'TRANS') transformPlayer(target);
             if (act === 'ULT') executeUltimate(target, enemy);
+        }
+
+        function playerJump(player) {
+            if (player.isGrounded) {
+                player.vy = -13; // 점프력
+                player.isGrounded = false;
+            }
         }
 
         function renderCharCards() {
@@ -235,18 +259,22 @@ game_html = r"""
         function handleInput() {
             if (!isGaming || isCutscene) return;
 
+            // P1 이동 및 점프
             P1.vx = 0;
             if (keysPressed['a'] && P1.x > 50) { P1.vx = -(P1.isTransformed ? 7 : 5); P1.facingRight = false; }
             if (keysPressed['d'] && P1.x < 870) { P1.vx = (P1.isTransformed ? 7 : 5); P1.facingRight = true; }
+            if (keysPressed['w']) playerJump(P1);
             if (keysPressed['f']) executeSkill(P1, P2, 'SKILL_A', 7, 10);
             if (keysPressed['g']) executeSkill(P1, P2, 'SKILL_B', 10, 15);
             if (keysPressed['v']) transformPlayer(P1);
             if (keysPressed['h']) executeUltimate(P1, P2);
 
+            // P2 조작
             if (!P2.isAI) {
                 P2.vx = 0;
                 if (keysPressed['arrowleft'] && P2.x > 50) { P2.vx = -(P2.isTransformed ? 7 : 5); P2.facingRight = false; }
                 if (keysPressed['arrowright'] && P2.x < 870) { P2.vx = (P2.isTransformed ? 7 : 5); P2.facingRight = true; }
+                if (keysPressed['arrowup']) playerJump(P2);
                 if (keysPressed['1']) executeSkill(P2, P1, 'SKILL_A', 7, 10);
                 if (keysPressed['2']) executeSkill(P2, P1, 'SKILL_B', 10, 15);
                 if (keysPressed['0']) transformPlayer(P2);
@@ -255,18 +283,37 @@ game_html = r"""
                 updateAI();
             }
 
-            P1.x += P1.vx;
-            P2.x += P2.vx;
+            // 물리 및 중력 적용
+            applyPhysics(P1);
+            applyPhysics(P2);
+        }
+
+        function applyPhysics(player) {
+            player.x += player.vx;
+            player.y += player.vy;
+
+            // 중력 계산
+            if (!player.isGrounded) {
+                player.vy += GRAVITY;
+            }
+
+            // 바닥 착지
+            if (player.y >= GROUND_Y) {
+                player.y = GROUND_Y;
+                player.vy = 0;
+                player.isGrounded = true;
+            }
         }
 
         function updateAI() {
             const dist = P1.x - P2.x;
-            if (Math.abs(dist) > 80) {
+            if (Math.abs(dist) > 90) {
                 P2.vx = dist > 0 ? 3 : -3;
                 P2.facingRight = dist > 0;
             } else {
                 P2.vx = 0;
-                if (Math.random() < 0.04) executeSkill(P2, P1, 'SKILL_A', 7, 10);
+                if (Math.random() < 0.03) executeSkill(P2, P1, 'SKILL_A', 7, 10);
+                if (Math.random() < 0.015) playerJump(P2);
                 if (P2.data.isHybrid && !P2.isTransformed && Math.random() < 0.02) transformPlayer(P2);
                 if (P2.ult >= 100) executeUltimate(P2, P1);
             }
@@ -288,7 +335,8 @@ game_html = r"""
 
             setTimeout(() => { attacker.isAttacking = false; }, 250);
 
-            if (Math.abs(attacker.x - defender.x) < 90) {
+            // 공중 및 거리 적중 판정
+            if (Math.abs(attacker.x - defender.x) < 95 && Math.abs(attacker.y - defender.y) < 50) {
                 defender.hp -= finalDmg;
                 attacker.ult = Math.min(100, attacker.ult + ultGain);
                 defender.x += attacker.facingRight ? 30 : -30;
@@ -320,44 +368,83 @@ game_html = r"""
             document.getElementById('p2-ult').style.width = P2.ult + '%';
         }
 
-        function drawPixelCharacter(p) {
+        // 인간형 픽셀 그리기 (앞/뒤 구분 및 정밀 비율)
+        function drawPixelHuman(p) {
             ctx.save();
             ctx.translate(p.x, p.y);
+            
+            // 바라보는 방향 반전 (오른쪽: 1, 왼쪽: -1)
             if (!p.facingRight) ctx.scale(-1, 1);
 
-            const scale = 4;
+            const scale = 3; // 픽셀 스케일 크기
 
+            // 변신 후 아우라 이펙트
             if (p.isTransformed) {
-                ctx.fillStyle = 'rgba(255, 0, 50, 0.4)';
-                ctx.fillRect(-12 * scale, -28 * scale, 24 * scale, 30 * scale);
+                ctx.fillStyle = 'rgba(255, 0, 85, 0.35)';
+                ctx.fillRect(-12 * scale, -38 * scale, 24 * scale, 40 * scale);
             }
 
+            // 1. 다리 (Legs) - 점프 상태 및 이동 동작 지원
             ctx.fillStyle = p.data.pants;
-            ctx.fillRect(-5 * scale, -8 * scale, 4 * scale, 8 * scale);
-            ctx.fillRect(1 * scale, -8 * scale, 4 * scale, 8 * scale);
-
-            ctx.fillStyle = p.data.shirt;
-            ctx.fillRect(-6 * scale, -18 * scale, 12 * scale, 10 * scale);
-
-            if (p.isTransformed && p.key === 'denji') {
-                ctx.fillStyle = '#444444';
-                ctx.fillRect(-7 * scale, -27 * scale, 14 * scale, 9 * scale);
-                ctx.fillStyle = '#ff0033';
-                ctx.fillRect(-9 * scale, -25 * scale, 18 * scale, 3 * scale);
+            if (!p.isGrounded) {
+                // 점프 모션 (다리 굽힘)
+                ctx.fillRect(-5 * scale, -10 * scale, 4 * scale, 7 * scale);
+                ctx.fillRect(1 * scale, -12 * scale, 4 * scale, 8 * scale);
+            } else if (p.vx !== 0) {
+                // 걸어가는 모션
+                ctx.fillRect(-6 * scale, -12 * scale, 4 * scale, 12 * scale);
+                ctx.fillRect(2 * scale, -12 * scale, 4 * scale, 12 * scale);
             } else {
-                ctx.fillStyle = '#ffdbac';
-                ctx.fillRect(-5 * scale, -25 * scale, 10 * scale, 7 * scale);
-                ctx.fillStyle = p.data.hair;
-                ctx.fillRect(-6 * scale, -28 * scale, 12 * scale, 5 * scale);
+                // 기본 서있는 모션
+                ctx.fillRect(-5 * scale, -14 * scale, 4 * scale, 14 * scale);
+                ctx.fillRect(1 * scale, -14 * scale, 4 * scale, 14 * scale);
             }
 
-            ctx.fillStyle = p.isTransformed ? '#ff0000' : p.data.shirt;
-            if (p.isAttacking) {
-                ctx.fillRect(4 * scale, -16 * scale, 16 * scale, 4 * scale);
-                ctx.fillStyle = '#ffff00';
-                ctx.fillRect(18 * scale, -20 * scale, 10 * scale, 12 * scale);
+            // 신발
+            ctx.fillStyle = '#111';
+            ctx.fillRect(-5 * scale, -2 * scale, 5 * scale, 2 * scale);
+            ctx.fillRect(1 * scale, -2 * scale, 5 * scale, 2 * scale);
+
+            // 2. 몸통/상체 (Torso/Shirt)
+            ctx.fillStyle = p.data.shirt;
+            ctx.fillRect(-5 * scale, -26 * scale, 10 * scale, 12 * scale);
+
+            // 넥타이/벨트 세부 디테일
+            ctx.fillStyle = '#111';
+            ctx.fillRect(-1 * scale, -25 * scale, 2 * scale, 8 * scale);
+
+            // 3. 머리 및 얼굴 (Head & Face - 앞/뒤 명확히 구분)
+            if (p.isTransformed && p.key === 'denji') {
+                // 덴지 전기톱 헤드
+                ctx.fillStyle = '#444';
+                ctx.fillRect(-6 * scale, -36 * scale, 12 * scale, 10 * scale);
+                ctx.fillStyle = '#c00';
+                ctx.fillRect(2 * scale, -33 * scale, 12 * scale, 4 * scale); // 정면 톱날
             } else {
-                ctx.fillRect(5 * scale, -17 * scale, 4 * scale, 9 * scale);
+                // 피부 (얼굴)
+                ctx.fillStyle = '#ffdbac';
+                ctx.fillRect(-4 * scale, -35 * scale, 8 * scale, 9 * scale);
+
+                // 눈 (앞을 바라보는 위치) - 방향 구분의 핵심
+                ctx.fillStyle = '#222';
+                ctx.fillRect(1 * scale, -32 * scale, 2 * scale, 2 * scale); // 앞쪽 눈
+
+                // 머리카락 (Hair)
+                ctx.fillStyle = p.data.hair;
+                ctx.fillRect(-5 * scale, -38 * scale, 10 * scale, 5 * scale); // 머리위
+                ctx.fillRect(-5 * scale, -35 * scale, 3 * scale, 7 * scale); // 뒷머리 (뒤쪽)
+            }
+
+            // 4. 팔 (Arms) & 공격 이펙트
+            ctx.fillStyle = p.isTransformed ? '#ff0033' : p.data.shirt;
+            if (p.isAttacking) {
+                // 공격할 때 팔 뻗기
+                ctx.fillRect(2 * scale, -24 * scale, 14 * scale, 4 * scale);
+                ctx.fillStyle = '#ffcc00';
+                ctx.fillRect(14 * scale, -28 * scale, 10 * scale, 12 * scale); // 타격 이펙트
+            } else {
+                // 일반 자세 팔
+                ctx.fillRect(-2 * scale, -24 * scale, 4 * scale, 10 * scale);
             }
 
             ctx.restore();
@@ -366,16 +453,16 @@ game_html = r"""
         function drawBackground() {
             if (selectedMap === 'hell') {
                 ctx.fillStyle = '#2b0000'; ctx.fillRect(0, 0, 960, 540);
-                ctx.fillStyle = '#660000'; ctx.fillRect(0, 420, 960, 120);
+                ctx.fillStyle = '#660000'; ctx.fillRect(0, 400, 960, 140);
                 ctx.fillStyle = '#ff3333';
                 for(let i=0; i<5; i++) ctx.fillRect(100 + i*180, 50, 60, 90);
             } else if (selectedMap === 'beach') {
                 ctx.fillStyle = '#0a192f'; ctx.fillRect(0, 0, 960, 540);
-                ctx.fillStyle = '#d2b48c'; ctx.fillRect(0, 420, 960, 120);
+                ctx.fillStyle = '#d2b48c'; ctx.fillRect(0, 400, 960, 140);
             } else {
                 ctx.fillStyle = '#1a0933'; ctx.fillRect(0, 0, 960, 540);
-                ctx.fillStyle = '#ff5500'; ctx.fillRect(0, 300, 960, 120);
-                ctx.fillStyle = '#333333'; ctx.fillRect(0, 420, 960, 120);
+                ctx.fillStyle = '#ff5500'; ctx.fillRect(0, 280, 960, 120);
+                ctx.fillStyle = '#333333'; ctx.fillRect(0, 400, 960, 140);
             }
         }
 
@@ -386,8 +473,8 @@ game_html = r"""
             drawBackground();
             handleInput();
 
-            drawPixelCharacter(P1);
-            drawPixelCharacter(P2);
+            drawPixelHuman(P1);
+            drawPixelHuman(P2);
 
             requestAnimationFrame(gameLoop);
         }
