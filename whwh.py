@@ -1,3 +1,9 @@
+import streamlit as st
+import streamlit.components.v1 as components
+
+st.set_page_config(page_title="체인소맨 하이브리드", layout="wide")
+
+game_html = r"""
 <!DOCTYPE html>
 <html lang="ko">
 <head>
@@ -228,7 +234,6 @@ const CANVAS_WIDTH = 800;
 const CANVAS_HEIGHT = 450;
 const GROUND_Y = 380;
 
-// 캐릭터 이미지 데이터
 const CHAR_IMAGES = {
   denji: 'https://i.ibb.co/3yk0mRk/denji.png',
   aki: 'https://static.wikia.nocookie.net/chainsaw-man/images/b/b3/Aki_Hayakawa_anime_design.png',
@@ -295,7 +300,6 @@ class Fighter {
     this.x += this.vx;
     this.y += this.vy;
 
-    // 화면 밖 제한
     if (this.x < 0) this.x = 0;
     if (this.x + this.width > CANVAS_WIDTH) this.x = CANVAS_WIDTH - this.width;
 
@@ -328,25 +332,20 @@ class Fighter {
     ctx.save();
 
     if (this.character === 'denji') {
-      // 1. 머리 (금발)
       ctx.fillStyle = '#f5c542';
       ctx.fillRect(this.x - 3, this.y - 6, this.width + 6, 24);
 
-      // 2. 얼굴
       ctx.fillStyle = '#fce4c8';
       ctx.fillRect(this.x + 2, this.y + 10, this.width - 4, 12);
 
-      // 3. 와이셔츠 & 넥타이
       ctx.fillStyle = '#ffffff';
       ctx.fillRect(this.x, this.y + 22, this.width, 24);
       ctx.fillStyle = '#111111';
       ctx.fillRect(this.x + (this.isP2 ? 8 : 28), this.y + 22, 4, 20);
 
-      // 4. 바지
       ctx.fillStyle = '#1c1c1e';
       ctx.fillRect(this.x, this.y + 46, this.width, this.height - 46);
 
-      // 5. 신발
       ctx.fillStyle = '#e6e6e6';
       ctx.fillRect(this.x - 2, this.y + this.height - 6, this.width + 4, 6);
     } else {
@@ -354,19 +353,16 @@ class Fighter {
       ctx.fillRect(this.x, this.y, this.width, this.height);
     }
 
-    // 체인소 모드 발동 오라
     if (this.character === 'denji' && this.isSpecialActive) {
       ctx.strokeStyle = (Math.floor(Date.now() / 50) % 2 === 0) ? '#ff0055' : '#ffaa00';
       ctx.lineWidth = 4;
       ctx.strokeRect(this.x - 6, this.y - 6, this.width + 12, this.height + 12);
     }
 
-    // 눈
     ctx.fillStyle = '#000';
     const eyeX = this.isP2 ? this.x + 8 : this.x + 24;
     ctx.fillRect(eyeX, this.y + 12, 6, 6);
 
-    // 공격 효과
     if (this.isAttacking) {
       ctx.fillStyle = this.character === 'denji' ? 'rgba(255, 0, 85, 0.8)' : 'rgba(255, 255, 255, 0.7)';
       const atkX = this.isP2 ? this.x - this.attackBox.width : this.x + this.width;
@@ -516,7 +512,6 @@ function gameLoop() {
 
   ctx.clearRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
 
-  // 배경
   ctx.fillStyle = '#11091c';
   ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
   ctx.fillStyle = '#ff0055';
@@ -540,3 +535,6 @@ updatePreview('p2');
 </script>
 </body>
 </html>
+"""
+
+components.html(game_html, height=500, scrolling=False)
