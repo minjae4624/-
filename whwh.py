@@ -1,7 +1,7 @@
 import streamlit as st
 import streamlit.components.v1 as components
 
-st.set_page_config(page_title="체인소맨 하이브리드", layout="wide")
+st.set_page_config(page_title="체인소맨 하이브리드 - 마키마 궁극기", layout="wide")
 
 game_html = r"""
 <!DOCTYPE html>
@@ -42,6 +42,7 @@ game_html = r"""
       flex-direction: column;
       justify-content: space-between;
       padding: 15px;
+      z-index: 5;
     }
     .hud {
       display: flex;
@@ -124,7 +125,7 @@ game_html = r"""
       border: 2px solid #ff0055;
       border-radius: 6px;
       background-size: cover;
-      background-position: top center;
+      background-position: center;
       background-repeat: no-repeat;
       box-shadow: 0 0 15px rgba(255, 0, 85, 0.3);
       background-color: #000;
@@ -160,6 +161,35 @@ game_html = r"""
       text-align: center;
       line-height: 1.4;
     }
+
+    /* 마키마 궁극기 연출 컷씬 오버레이 */
+    #makima-cutscene {
+      position: absolute;
+      top: 0; left: 0; width: 100%; height: 100%;
+      background: rgba(0, 0, 0, 0.95);
+      display: none;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      z-index: 8;
+      pointer-events: none;
+      animation: fadeIn 0.3s ease-out;
+    }
+    #makima-cutscene img {
+      width: 220px;
+      height: auto;
+      border: 3px solid #ff0055;
+      box-shadow: 0 0 30px #ff0055;
+      border-radius: 8px;
+      margin-bottom: 10px;
+    }
+    #makima-cutscene .text {
+      font-size: 26px;
+      font-weight: 900;
+      color: #ff0055;
+      text-shadow: 0 0 15px #ff0055;
+      font-style: italic;
+    }
   </style>
 </head>
 <body>
@@ -167,18 +197,24 @@ game_html = r"""
 <div id="game-container">
   <canvas id="gameCanvas" width="800" height="450"></canvas>
 
+  <!-- 마키마 궁극기 컷씬 오버레이 -->
+  <div id="makima-cutscene">
+    <img src="https://i.ibb.co/L5Q2w4X/makima.png" alt="Makima Ritual">
+    <div class="text">"이름을 복창해라... (압착)"</div>
+  </div>
+
   <!-- HUD Overlay -->
   <div class="ui-layer">
     <div class="hud">
       <div>
-        <div id="p1-name" class="player-name">1P: 덴지</div>
+        <div id="p1-name" class="player-name">1P: 하야카와 아키</div>
         <div class="health-bar-container">
           <div id="p1-health" class="health-bar"></div>
         </div>
       </div>
       <div id="score" class="score-board">0 - 0</div>
       <div style="text-align: right;">
-        <div id="p2-name" class="player-name">2P: 하야카와 아키</div>
+        <div id="p2-name" class="player-name">2P: 마키마</div>
         <div class="health-bar-container">
           <div id="p2-health" class="health-bar" style="float: right;"></div>
         </div>
@@ -196,25 +232,27 @@ game_html = r"""
         <label style="font-weight:bold; color:#ff0055;">1P 캐릭터</label>
         <div id="p1-preview" class="char-preview"></div>
         <select id="p1-select" onchange="updatePreview('p1')">
-          <option value="denji">덴지 (특수기: 체인소 변신)</option>
-          <option value="aki">하야카와 아키 (특수기: 신속 베기)</option>
-          <option value="power">파워 (특수기: 피의 강타)</option>
+          <option value="aki">하야카와 아키 (궁극기: 여우의 악마)</option>
+          <option value="makima">마키마 (궁극기: 신사 압착의 의식)</option>
+          <option value="denji">덴지 (궁극기: 체인소 변신)</option>
+          <option value="power">파워 (궁극기: 피의 강타)</option>
         </select>
       </div>
       <div class="player-select-panel">
         <label style="font-weight:bold; color:#0088ff;">2P 캐릭터</label>
         <div id="p2-preview" class="char-preview"></div>
         <select id="p2-select" onchange="updatePreview('p2')">
-          <option value="aki">하야카와 아키 (특수기: 신속 베기)</option>
-          <option value="denji">덴지 (특수기: 체인소 변신)</option>
-          <option value="power">파워 (특수기: 피의 강타)</option>
+          <option value="makima">마키마 (궁극기: 신사 압착의 의식)</option>
+          <option value="aki">하야카와 아키 (궁극기: 여우의 악마)</option>
+          <option value="denji">덴지 (궁극기: 체인소 변신)</option>
+          <option value="power">파워 (궁극기: 피의 강타)</option>
         </select>
       </div>
     </div>
     <button onclick="startGame()">전투 시작!</button>
     <div class="controls-info">
-      <strong>[1P 조작]</strong> A/D: 이동 | W: 점프 | F: 일반공격 | E: 잡기술(특수기)<br>
-      <strong>[2P 조작]</strong> 방향키: 이동 | Up: 점프 | K: 일반공격 | O: 잡기술(특수기)
+      <strong>[1P 조작]</strong> A/D: 이동 | W: 점프 | F: 일반공격 | E: 궁극기<br>
+      <strong>[2P 조작]</strong> 방향키: 이동 | Up: 점프 | K: 일반공격 | O: 궁극기
     </div>
   </div>
 
@@ -234,10 +272,12 @@ const CANVAS_WIDTH = 800;
 const CANVAS_HEIGHT = 450;
 const GROUND_Y = 380;
 
+// 공식 일러스트 URL (아키, 마키마, 덴지, 파워)
 const CHAR_IMAGES = {
   denji: 'https://i.ibb.co/3yk0mRk/denji.png',
-  aki: 'https://static.wikia.nocookie.net/chainsaw-man/images/b/b3/Aki_Hayakawa_anime_design.png',
-  power: 'https://m.media-amazon.com/images/M/MV5BNTBmNTI2ZDQtNWFlNy00ZjgwLWIzY2ItYzA3Nzc0YTY1ZmMyXkEyXkFqcGc@._V1_.jpg'
+  aki: 'https://i.ibb.co/b3yK49Z/aki.png',
+  power: 'https://i.ibb.co/6y4TjT1/power.png',
+  makima: 'https://i.ibb.co/L5Q2w4X/makima.png'
 };
 
 let p1Score = 0;
@@ -332,39 +372,81 @@ class Fighter {
     ctx.save();
 
     if (this.character === 'denji') {
+      // 덴지
       ctx.fillStyle = '#f5c542';
       ctx.fillRect(this.x - 3, this.y - 6, this.width + 6, 24);
-
       ctx.fillStyle = '#fce4c8';
       ctx.fillRect(this.x + 2, this.y + 10, this.width - 4, 12);
-
       ctx.fillStyle = '#ffffff';
       ctx.fillRect(this.x, this.y + 22, this.width, 24);
       ctx.fillStyle = '#111111';
       ctx.fillRect(this.x + (this.isP2 ? 8 : 28), this.y + 22, 4, 20);
-
       ctx.fillStyle = '#1c1c1e';
       ctx.fillRect(this.x, this.y + 46, this.width, this.height - 46);
+    } 
+    else if (this.character === 'aki') {
+      // 하야카와 아키
+      ctx.fillStyle = '#1e2749';
+      ctx.fillRect(this.x - 2, this.y - 4, this.width + 4, 22);
+      ctx.fillRect(this.isP2 ? this.x + 28 : this.x + 6, this.y - 12, 6, 10);
+      ctx.fillStyle = '#fce4c8';
+      ctx.fillRect(this.x + 2, this.y + 10, this.width - 4, 10);
+      ctx.fillStyle = '#15161a';
+      ctx.fillRect(this.x, this.y + 20, this.width, 26);
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(this.x + 16, this.y + 20, 8, 12);
+      ctx.fillStyle = '#15161a';
+      ctx.fillRect(this.x, this.y + 46, this.width, this.height - 46);
+      ctx.fillStyle = '#888888';
+      ctx.fillRect(this.isP2 ? this.x + 2 : this.x + this.width - 6, this.y + 8, 4, 22);
+    }
+    else if (this.character === 'power') {
+      // 파워
+      ctx.fillStyle = '#ff3344';
+      ctx.fillRect(this.x + 10, this.y - 12, 5, 10);
+      ctx.fillRect(this.x + 25, this.y - 12, 5, 10);
+      ctx.fillStyle = '#f4a261';
+      ctx.fillRect(this.x - 4, this.y - 4, this.width + 8, 45);
+      ctx.fillStyle = '#2a6f97';
+      ctx.fillRect(this.x - 3, this.y + 20, this.width + 6, 26);
+      ctx.fillStyle = '#1c1c1e';
+      ctx.fillRect(this.x, this.y + 46, this.width, this.height - 46);
+    }
+    else if (this.character === 'makima') {
+      // 마키마 (붉은 땋은 머리 + 검은 트렌치 코트/정장)
+      ctx.fillStyle = '#d94e34'; // 땋은 붉은 머리
+      ctx.fillRect(this.x - 2, this.y - 6, this.width + 4, 24);
+      ctx.fillRect(this.isP2 ? this.x + 30 : this.x + 4, this.y + 15, 6, 30);
 
-      ctx.fillStyle = '#e6e6e6';
-      ctx.fillRect(this.x - 2, this.y + this.height - 6, this.width + 4, 6);
-    } else {
-      ctx.fillStyle = this.color;
-      ctx.fillRect(this.x, this.y, this.width, this.height);
+      ctx.fillStyle = '#fce4c8';
+      ctx.fillRect(this.x + 2, this.y + 10, this.width - 4, 10);
+
+      ctx.fillStyle = '#111115'; // 검은 긴 코트
+      ctx.fillRect(this.x - 2, this.y + 20, this.width + 4, 45);
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(this.x + 15, this.y + 20, 10, 12);
+      ctx.fillStyle = '#800000'; // 넥타이
+      ctx.fillRect(this.x + 18, this.y + 20, 4, 15);
+
+      ctx.fillStyle = '#050505';
+      ctx.fillRect(this.x, this.y + 60, this.width, 10);
     }
 
+    // 덴지 변신 시 발동 테두리 이펙트
     if (this.character === 'denji' && this.isSpecialActive) {
       ctx.strokeStyle = (Math.floor(Date.now() / 50) % 2 === 0) ? '#ff0055' : '#ffaa00';
       ctx.lineWidth = 4;
       ctx.strokeRect(this.x - 6, this.y - 6, this.width + 12, this.height + 12);
     }
 
+    // 눈
     ctx.fillStyle = '#000';
     const eyeX = this.isP2 ? this.x + 8 : this.x + 24;
     ctx.fillRect(eyeX, this.y + 12, 6, 6);
 
+    // 공격 이펙트
     if (this.isAttacking) {
-      ctx.fillStyle = this.character === 'denji' ? 'rgba(255, 0, 85, 0.8)' : 'rgba(255, 255, 255, 0.7)';
+      ctx.fillStyle = 'rgba(255, 0, 85, 0.8)';
       const atkX = this.isP2 ? this.x - this.attackBox.width : this.x + this.width;
       ctx.fillRect(atkX, this.y + 10, this.attackBox.width, this.attackBox.height);
     }
@@ -384,18 +466,31 @@ class Fighter {
     if (this.specialCooldown) return;
     this.specialCooldown = true;
 
-    if (this.character === 'denji') {
+    if (this.character === 'makima') {
+      // [마키마 궁극기: 유튜브 영상 속 신사 압착 의식 연출]
+      const cutsceneEl = document.getElementById('makima-cutscene');
+      cutsceneEl.style.display = 'flex';
+
+      setTimeout(() => {
+        cutsceneEl.style.display = 'none';
+        
+        // 악마의 거대한 손이 상대를 짓눌러 압착하는 애니메이션 이펙트 생성
+        triggerMakimaSqueezeEffect(enemy);
+        enemy.takeDamage(35); // 거대한 피해
+      }, 1200);
+
+    } else if (this.character === 'denji') {
       this.isSpecialActive = true;
       this.specialTimer = 180;
       this.speed = 8.5;
     } else {
-      const dashDistance = this.isP2 ? -130 : 130;
+      const dashDistance = this.isP2 ? -140 : 140;
       this.x += dashDistance;
       if (this.x < 0) this.x = 0;
       if (this.x + this.width > CANVAS_WIDTH) this.x = CANVAS_WIDTH - this.width;
 
-      if (Math.abs(this.x - enemy.x) < 70) {
-        enemy.takeDamage(18);
+      if (Math.abs(this.x - enemy.x) < 75) {
+        enemy.takeDamage(20);
       }
     }
 
@@ -405,6 +500,44 @@ class Fighter {
   takeDamage(amount) {
     this.hp -= amount;
     if (this.hp < 0) this.hp = 0;
+  }
+}
+
+// 마키마 신사 압착 이펙트
+let makimaEffects = [];
+
+function triggerMakimaSqueezeEffect(target) {
+  makimaEffects.push({
+    x: target.x + target.width / 2,
+    y: target.y + target.height / 2,
+    size: 150,
+    alpha: 1.0,
+    progress: 0
+  });
+}
+
+function drawMakimaEffects() {
+  for (let i = makimaEffects.length - 1; i >= 0; i--) {
+    let eff = makimaEffects[i];
+    eff.progress += 0.08;
+    eff.alpha -= 0.03;
+
+    ctx.save();
+    // 상하에서 짓누르는 어두운 악마의 손길 이펙트
+    ctx.fillStyle = `rgba(255, 0, 55, ${Math.max(0, eff.alpha)})`;
+    ctx.beginPath();
+    ctx.arc(eff.x, eff.y, eff.size * (1 - eff.progress * 0.5), 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.strokeStyle = `rgba(255, 255, 255, ${Math.max(0, eff.alpha)})`;
+    ctx.lineWidth = 6;
+    ctx.strokeRect(eff.x - 40, eff.y - 60, 80, 120);
+
+    ctx.restore();
+
+    if (eff.alpha <= 0) {
+      makimaEffects.splice(i, 1);
+    }
   }
 }
 
@@ -435,6 +568,7 @@ function getCharName(key) {
   if (key === 'denji') return '덴지';
   if (key === 'aki') return '하야카와 아키';
   if (key === 'power') return '파워';
+  if (key === 'makima') return '마키마';
   return key;
 }
 
@@ -487,7 +621,6 @@ function updateHUD() {
 function checkRoundOver() {
   if (player1.hp <= 0 || player2.hp <= 0) {
     if (player1.hp <= 0 && player2.hp <= 0) {
-      // 무승부
     } else if (player1.hp <= 0) {
       p2Score++;
     } else if (player2.hp <= 0) {
@@ -523,6 +656,8 @@ function gameLoop() {
 
   player1.draw();
   player2.draw();
+
+  drawMakimaEffects();
 
   updateHUD();
   checkRoundOver();
