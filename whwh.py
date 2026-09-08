@@ -1,14 +1,14 @@
 import streamlit as st
 import streamlit.components.v1 as components
 
-st.set_page_config(page_title="체인소맨 하이브리드 - 3스킬+궁극기", layout="wide")
+st.set_page_config(page_title="체인소맨 하이브리드 - BGM 포함", layout="wide")
 
 game_html = r"""
 <!DOCTYPE html>
 <html lang="ko">
 <head>
   <meta charset="UTF-8">
-  <title>체인소맨 하이브리드 - 스킬 확장판</title>
+  <title>체인소맨 하이브리드 - BGM 포함</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; user-select: none; }
     body {
@@ -31,13 +31,21 @@ game_html = r"""
     }
     #video-background {
       position: absolute; top: 50%; left: 50%; width: 100%; height: 100%;
-      transform: translate(-50%, -50%); z-index: 1; pointer-events: none;
+      transform: translate(-50%, -50%); z-index: 1; pointer-events: auto;
       filter: brightness(0.7) contrast(1.1); object-fit: cover;
     }
     .title { 
       position: relative; z-index: 2; font-size: 38px; color: #fff; margin-bottom: 10px; 
       text-shadow: 3px 3px 0px #ff0055, -3px -3px 0px #00e5ff; font-weight: 900; font-style: italic;
     }
+    .sound-btn {
+      position: absolute; top: 15px; right: 15px; z-index: 25;
+      padding: 8px 16px; font-size: 14px; font-weight: bold; color: #fff;
+      background: rgba(0, 0, 0, 0.7); border: 2px solid #ff0055; border-radius: 20px;
+      cursor: pointer; transition: all 0.2s; box-shadow: 0 0 10px rgba(255, 0, 85, 0.5);
+    }
+    .sound-btn:hover { background: #ff0055; color: #fff; }
+
     .start-btn {
       position: relative; z-index: 2; padding: 14px 40px; font-size: 22px; font-weight: bold;
       color: #fff; background: linear-gradient(45deg, #ff0055, #ff5500);
@@ -71,9 +79,9 @@ game_html = r"""
       display: flex; flex-direction: column; align-items: center; gap: 6px;
       background: rgba(255, 255, 255, 0.05); padding: 10px; border-radius: 8px; border: 1px solid #333;
     }
-    .char-preview {
+    .char-preview-canvas {
       width: 100px; height: 110px; border: 2px solid #ff0055; border-radius: 6px;
-      background-size: contain; background-repeat: no-repeat; background-position: center; background-color: #000;
+      background-color: #050508;
     }
     select {
       padding: 5px 10px; font-size: 13px; background: #1a1a1a; color: #fff;
@@ -92,16 +100,18 @@ game_html = r"""
       flex-direction: column; align-items: center; justify-content: center;
       z-index: 15; pointer-events: none;
     }
-    #makima-cutscene img { width: 200px; height: auto; border: 3px solid #ff0055; box-shadow: 0 0 30px #ff0055; border-radius: 8px; margin-bottom: 10px; }
     #makima-cutscene .text { font-size: 24px; font-weight: 900; color: #ff0055; text-shadow: 0 0 15px #ff0055; font-style: italic; }
   </style>
 </head>
 <body>
 
 <div id="game-container">
+  <button id="sound-btn" class="sound-btn" onclick="toggleAudio()">🔊 BGM 켜기</button>
+
   <div id="start-screen">
+    <!-- 유튜브 플레이어 iframe (YouTube API 연동) -->
     <iframe id="video-background" 
-      src="https://www.youtube.com/embed/l9E-dh9kf_0?autoplay=1&mute=1&controls=0&loop=1&playlist=l9E-dh9kf_0&enablejsapi=1" 
+      src="https://www.youtube.com/embed/l9E-dh9kf_0?enablejsapi=1&autoplay=1&mute=0&controls=0&loop=1&playlist=l9E-dh9kf_0" 
       frameborder="0" allow="autoplay; encrypted-media">
     </iframe>
     <h1 class="title">CHAINSAW HYBRID</h1>
@@ -111,7 +121,6 @@ game_html = r"""
   <canvas id="gameCanvas" width="800" height="450"></canvas>
 
   <div id="makima-cutscene">
-    <img src="https://i.ibb.co/L5Q2w4X/makima.png" alt="Makima Ritual">
     <div class="text">"이름을 복창해라... (압착)"</div>
   </div>
 
@@ -138,7 +147,7 @@ game_html = r"""
     <div class="select-box">
       <div class="player-select-panel">
         <label style="font-weight:bold; color:#ff0055;">1P 캐릭터</label>
-        <div id="p1-preview" class="char-preview"></div>
+        <canvas id="p1-prev-cv" class="char-preview-canvas" width="100" height="110"></canvas>
         <select id="p1-select" onchange="updatePreview('p1')">
           <option value="denji">덴지 (체인소 악마)</option>
           <option value="aki">하야카와 아키</option>
@@ -148,7 +157,7 @@ game_html = r"""
       </div>
       <div class="player-select-panel">
         <label style="font-weight:bold; color:#0088ff;">2P 캐릭터</label>
-        <div id="p2-preview" class="char-preview"></div>
+        <canvas id="p2-prev-cv" class="char-preview-canvas" width="100" height="110"></canvas>
         <select id="p2-select" onchange="updatePreview('p2')">
           <option value="makima">마키마 (신사 의식)</option>
           <option value="denji">덴지 (체인소 악마)</option>
@@ -171,6 +180,59 @@ game_html = r"""
 </div>
 
 <script>
+// YouTube API 제어 연동
+let ytPlayer = null;
+let isMuted = true;
+
+const tag = document.createElement('script');
+tag.src = "https://www.youtube.com/iframe_api";
+const firstScriptTag = document.getElementsByTagName('script')[0];
+firstScriptTag.parentNode.insertBefore(tag, firstScriptTag);
+
+function onYouTubeIframeAPIReady() {
+  ytPlayer = new YT.Player('video-background', {
+    events: {
+      'onReady': (e) => {
+        e.target.unMute();
+        e.target.setVolume(80);
+        e.target.playVideo();
+      }
+    }
+  });
+}
+
+function toggleAudio() {
+  const btn = document.getElementById('sound-btn');
+  if (ytPlayer && ytPlayer.unMute) {
+    if (isMuted) {
+      ytPlayer.unMute();
+      ytPlayer.setVolume(80);
+      ytPlayer.playVideo();
+      btn.innerText = "🔇 BGM 끄기";
+      isMuted = false;
+    } else {
+      ytPlayer.mute();
+      btn.innerText = "🔊 BGM 켜기";
+      isMuted = true;
+    }
+  }
+}
+
+function enterCharSelect() {
+  // 사용자가 GAME START를 누를 때 소리 락을 풀어 즉시 재생
+  if (ytPlayer && ytPlayer.unMute) {
+    ytPlayer.unMute();
+    ytPlayer.setVolume(80);
+    ytPlayer.playVideo();
+    document.getElementById('sound-btn').innerText = "🔇 BGM 끄기";
+    isMuted = false;
+  }
+  document.getElementById('start-screen').style.display = 'none';
+  document.getElementById('select-screen').style.display = 'flex';
+  updatePreview('p1');
+  updatePreview('p2');
+}
+
 const canvas = document.getElementById('gameCanvas');
 const ctx = canvas.getContext('2d');
 
@@ -178,19 +240,6 @@ const GRAVITY = 0.65;
 const CANVAS_WIDTH = 800;
 const CANVAS_HEIGHT = 450;
 const GROUND_Y = 380;
-
-const CHAR_IMAGES = {
-  denji: 'https://i.ibb.co/Lhb8mC4/chainsaw-denji.png',
-  aki: 'https://i.ibb.co/b3yK49Z/aki.png',
-  power: 'https://i.ibb.co/6y4TjT1/power.png',
-  makima: 'https://i.ibb.co/L5Q2w4X/makima.png'
-};
-
-const loadedImages = {};
-for (let key in CHAR_IMAGES) {
-  loadedImages[key] = new Image();
-  loadedImages[key].src = CHAR_IMAGES[key];
-}
 
 let p1Score = 0, p2Score = 0;
 let gameOver = false;
@@ -203,11 +252,49 @@ const keys = {};
 window.addEventListener('keydown', e => { keys[e.key] = true; });
 window.addEventListener('keyup', e => { keys[e.key] = false; });
 
-function enterCharSelect() {
-  document.getElementById('start-screen').style.display = 'none';
-  document.getElementById('select-screen').style.display = 'flex';
-  updatePreview('p1');
-  updatePreview('p2');
+function renderPixelChar(targetCtx, charType, width, height) {
+  targetCtx.save();
+
+  if (charType === 'denji') {
+    targetCtx.fillStyle = '#ff3300';
+    targetCtx.fillRect(-width/2 + 10, -height/2 + 10, width - 20, 20);
+    
+    targetCtx.fillStyle = '#cccccc';
+    targetCtx.fillRect(-width/2 + 22, -height/2 - 25, 16, 35);
+    targetCtx.fillStyle = '#ff0000';
+    targetCtx.fillRect(-width/2 + 24, -height/2 - 20, 12, 10);
+
+    targetCtx.fillStyle = '#ffffff'; targetCtx.fillRect(-width/2 + 12, -height/2 + 30, width - 24, 25);
+    targetCtx.fillStyle = '#222222'; targetCtx.fillRect(-width/2 + 12, -height/2 + 55, width - 24, 30);
+
+    targetCtx.fillStyle = '#aaaaaa';
+    targetCtx.fillRect(width/2 - 12, -height/2 + 20, 10, 45);
+    targetCtx.fillRect(-width/2 + 2, -height/2 + 20, 10, 45);
+  } else if (charType === 'makima') {
+    targetCtx.fillStyle = '#e65c00';
+    targetCtx.fillRect(-width/2 + 12, -height/2 + 5, width - 24, 25);
+    targetCtx.fillStyle = '#ffdbac';
+    targetCtx.fillRect(-width/2 + 16, -height/2 + 18, width - 32, 12);
+    targetCtx.fillStyle = '#111115';
+    targetCtx.fillRect(-width/2 + 10, -height/2 + 30, width - 20, 55);
+    targetCtx.fillStyle = '#800000';
+    targetCtx.fillRect(-2, -height/2 + 30, 4, 20);
+  } else if (charType === 'power') {
+    targetCtx.fillStyle = '#ffcc00';
+    targetCtx.fillRect(-width/2 + 8, -height/2 + 5, width - 16, 30);
+    targetCtx.fillStyle = '#ff0000';
+    targetCtx.fillRect(-12, -height/2 - 5, 6, 12); targetCtx.fillRect(6, -height/2 - 5, 6, 12);
+    targetCtx.fillStyle = '#003366';
+    targetCtx.fillRect(-width/2 + 10, -height/2 + 35, width - 20, 50);
+  } else {
+    targetCtx.fillStyle = '#0f172a';
+    targetCtx.fillRect(-width/2 + 12, -height/2 + 5, width - 24, 25);
+    targetCtx.fillRect(-4, -height/2 - 8, 8, 10);
+    targetCtx.fillStyle = '#1e293b';
+    targetCtx.fillRect(-width/2 + 10, -height/2 + 30, width - 20, 55);
+  }
+
+  targetCtx.restore();
 }
 
 class Fighter {
@@ -227,7 +314,6 @@ class Fighter {
     this.isAttacking = false;
     this.attackBox = { width: 55, height: 45 };
     
-    // 스킬 쿨타임 관리
     this.cdSkill1 = false;
     this.cdSkill2 = false;
     this.cdSkill3 = false;
@@ -268,7 +354,6 @@ class Fighter {
       });
     }
 
-    // 근접 일반 공격 히트
     if (this.isAttacking) {
       const atkX = this.facing === 'right' ? this.x + this.width : this.x - this.attackBox.width;
       const atkY = this.y + 10;
@@ -296,14 +381,7 @@ class Fighter {
       ctx.scale(-1, 1);
     }
 
-    const img = loadedImages[this.character];
-    if (img && img.complete) {
-      ctx.drawImage(img, -this.width / 2, -this.height / 2, this.width, this.height);
-    } else {
-      ctx.fillStyle = this.isP2 ? '#00e5ff' : '#ff0055';
-      ctx.fillRect(-this.width / 2, -this.height / 2, this.width, this.height);
-    }
-
+    renderPixelChar(ctx, this.character, this.width, this.height);
     ctx.restore();
 
     if (this.isAttacking) {
@@ -313,14 +391,12 @@ class Fighter {
     }
   }
 
-  // [기본] 일반 공격
   attack() {
     if (this.isAttacking) return;
     this.isAttacking = true;
     setTimeout(() => { this.isAttacking = false; }, 120);
   }
 
-  // [스킬 1] 체인소 강력 슬래시
   useSkill1(enemy) {
     if (this.cdSkill1) return;
     this.cdSkill1 = true;
@@ -329,23 +405,21 @@ class Fighter {
     createParticles(this.x + this.width/2 + (dir * 40), this.y + 30, '#ff5500', 25);
 
     const hitRange = 90;
-    const atkX = this.facing === 'right' ? this.x : this.x - hitRange;
     if (Math.abs(this.x - enemy.x) < hitRange && Math.abs(this.y - enemy.y) < 60) {
       enemy.takeDamage(16);
       this.ultGauge = Math.min(100, this.ultGauge + 20);
       screenShake = 12;
     }
 
-    setTimeout(() => { this.cdSkill1 = false; }, 3000); // 쿨타임 3초
+    setTimeout(() => { this.cdSkill1 = false; }, 3000);
   }
 
-  // [스킬 2] 돌진 킥 (체인소 풋)
   useSkill2(enemy) {
     if (this.cdSkill2) return;
     this.cdSkill2 = true;
 
     const dir = this.facing === 'right' ? 1 : -1;
-    this.vx = dir * 18; // 전방 급속 돌진
+    this.vx = dir * 18;
     createParticles(this.x + this.width/2, this.y + this.height - 10, '#00e5ff', 20);
 
     setTimeout(() => {
@@ -356,10 +430,9 @@ class Fighter {
       }
     }, 100);
 
-    setTimeout(() => { this.cdSkill2 = false; }, 4000); // 쿨타임 4초
+    setTimeout(() => { this.cdSkill2 = false; }, 4000);
   }
 
-  // [스킬 3] 체인 사슬 포획 (상대방 당겨오기)
   useSkill3(enemy) {
     if (this.cdSkill3) return;
     this.cdSkill3 = true;
@@ -375,7 +448,6 @@ class Fighter {
     });
 
     if (Math.abs(startX - targetX) < 380) {
-      // 상대를 내 앞으로 끌어당김
       enemy.x = this.facing === 'right' ? this.x + 50 : this.x - 50;
       enemy.takeDamage(10);
       this.ultGauge = Math.min(100, this.ultGauge + 15);
@@ -383,10 +455,9 @@ class Fighter {
       createParticles(enemy.x + enemy.width/2, enemy.y + 30, '#ffffff', 20);
     }
 
-    setTimeout(() => { this.cdSkill3 = false; }, 6000); // 쿨타임 6초
+    setTimeout(() => { this.cdSkill3 = false; }, 6000);
   }
 
-  // [궁극기] 체인소 바이크 / 마키마 의식
   useUltimate(enemy) {
     if (this.ultGauge < 100) return;
     this.ultGauge = 0;
@@ -401,7 +472,6 @@ class Fighter {
         screenShake = 25;
       }, 1200);
     } else {
-      // 덴지 체인소 바이크 난타 궁극기
       const dir = this.facing === 'right' ? 1 : -1;
       this.vx = dir * 25;
       createParticles(enemy.x + enemy.width / 2, enemy.y + enemy.height / 2, '#ff0055', 80);
@@ -437,8 +507,14 @@ let player1, player2;
 
 function updatePreview(playerKey) {
   const selectEl = document.getElementById(playerKey + '-select');
-  const previewEl = document.getElementById(playerKey + '-preview');
-  previewEl.style.backgroundImage = `url('${CHAR_IMAGES[selectEl.value]}')`;
+  const cv = document.getElementById(playerKey + '-prev-cv');
+  const pCtx = cv.getContext('2d');
+  
+  pCtx.clearRect(0, 0, cv.width, cv.height);
+  pCtx.save();
+  pCtx.translate(cv.width / 2, cv.height / 2 + 5);
+  renderPixelChar(pCtx, selectEl.value, 50, 75);
+  pCtx.restore();
 }
 
 function initGame() {
@@ -471,7 +547,6 @@ function resetFullGame() {
 }
 
 function handleInput() {
-  // 1P 조작
   player1.vx = 0;
   if (keys['a'] || keys['A']) player1.vx = -player1.speed;
   if (keys['d'] || keys['D']) player1.vx = player1.speed;
@@ -482,7 +557,6 @@ function handleInput() {
   if (keys['c'] || keys['C']) player1.useSkill3(player2);
   if (keys['e'] || keys['E']) player1.useUltimate(player2);
 
-  // 2P 조작
   player2.vx = 0;
   if (keys['ArrowLeft']) player2.vx = -player2.speed;
   if (keys['ArrowRight']) player2.vx = player2.speed;
@@ -522,17 +596,13 @@ function gameLoop() {
   player1.update(player2);
   player2.update(player1);
 
-  // 이동 잔상
   afterImages.forEach((img, idx) => {
     ctx.save();
     ctx.globalAlpha = img.alpha;
     ctx.translate(img.x + img.width / 2, img.y + img.height / 2);
     if (img.facing === 'left') ctx.scale(-1, 1);
 
-    const charImg = loadedImages[img.character];
-    if (charImg && charImg.complete) {
-      ctx.drawImage(charImg, -img.width / 2, -img.height / 2, img.width, img.height);
-    }
+    renderPixelChar(ctx, img.character, img.width, img.height);
     ctx.restore();
 
     img.alpha -= 0.08;
@@ -543,7 +613,6 @@ function gameLoop() {
   player1.draw();
   player2.draw();
 
-  // 사슬 포획 이펙트
   activeChains.forEach((chain, idx) => {
     ctx.strokeStyle = '#ff0055';
     ctx.lineWidth = 4;
@@ -555,7 +624,6 @@ function gameLoop() {
     if (chain.life <= 0) activeChains.splice(idx, 1);
   });
 
-  // 파티클
   particles.forEach((p, idx) => {
     ctx.fillStyle = p.color;
     ctx.fillRect(p.x, p.y, p.size, p.size);
@@ -563,7 +631,6 @@ function gameLoop() {
     if (p.life <= 0) particles.splice(idx, 1);
   });
 
-  // 마키마 압착 이펙트
   makimaEffects.forEach((eff, idx) => {
     ctx.fillStyle = `rgba(255, 0, 55, ${eff.alpha})`;
     ctx.beginPath(); ctx.arc(eff.x, eff.y, eff.size, 0, Math.PI * 2); ctx.fill();
