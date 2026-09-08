@@ -1,3 +1,10 @@
+import streamlit as st
+import streamlit.components.v1 as components
+
+st.set_page_config(page_title="Pixel Action Game", layout="wide")
+
+# HTML/CSS/JS 코드를 파이썬 멀티라인 문자열(r""")로 감싸서 전달합니다.
+game_html = r"""
 <!DOCTYPE html>
 <html lang="ko">
 <head>
@@ -22,17 +29,20 @@
 
         #game-container {
             position: relative;
-            width: 100vw;
-            height: 100vh;
+            width: 100%;
+            height: 540px;
             display: flex;
             justify-content: center;
             align-items: center;
+            overflow: hidden;
+            border: 2px solid #ff0055;
+            box-shadow: 0 0 20px rgba(255, 0, 85, 0.4);
         }
 
         /* 메인 게임 캔버스 */
         canvas {
             background: #111318;
-            image-rendering: pixelated; /* 픽셀 선명도 강화 */
+            image-rendering: pixelated;
             box-shadow: 0 0 30px rgba(0,0,0,0.8);
         }
 
@@ -56,25 +66,13 @@
             position: absolute;
             top: 50%;
             left: 50%;
-            width: 100vw;
-            height: 56.25vw; /* 16:9 비율 유지 */
-            min-height: 100vh;
-            min-width: 177.77vh;
+            width: 100%;
+            height: 100%;
             transform: translate(-50%, -50%);
             z-index: 1;
             pointer-events: none;
             filter: brightness(0.6) contrast(1.1);
-        }
-
-        /* UI 엘리먼트 */
-        #ui-layer {
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            z-index: 5;
-            pointer-events: none;
+            object-fit: cover;
         }
 
         .start-btn {
@@ -105,18 +103,30 @@
             position: relative;
             z-index: 11;
             color: #fff;
-            font-size: 48px;
+            font-size: 44px;
             font-weight: 900;
             text-shadow: 3px 3px 0px #ff0055, -3px -3px 0px #00e5ff;
-            margin-bottom: 30px;
+            margin-bottom: 25px;
             text-align: center;
+        }
+
+        .controls-info {
+            position: relative;
+            z-index: 11;
+            color: #ccc;
+            font-size: 14px;
+            margin-top: 15px;
+            text-align: center;
+            background: rgba(0,0,0,0.6);
+            padding: 8px 15px;
+            border-radius: 5px;
         }
     </style>
 </head>
 <body>
 
     <div id="game-container">
-        <!-- 배경 유튜브 영상 (요청 영상) -->
+        <!-- 배경 유튜브 영상 (IRIS OUT) -->
         <iframe id="video-background" 
             src="https://www.youtube.com/embed/l9E-dh9kf_0?autoplay=1&mute=1&controls=0&loop=1&playlist=l9E-dh9kf_0&enablejsapi=1" 
             frameborder="0" 
@@ -127,6 +137,10 @@
         <div id="start-screen">
             <h1 class="title-text">PIXEL ACTION</h1>
             <button class="start-btn" id="start-btn">GAME START</button>
+            <div class="controls-info">
+                이동: A / D 또는 방향키 | 점프: W / Space<br>
+                스킬: Z | 궁극기: X (게이지 100% 필요)
+            </div>
         </div>
 
         <!-- 게임 캔버스 -->
@@ -144,7 +158,6 @@
         let particles = [];
         let screenShakeTime = 0;
 
-        // 플레이어 객체 (디테일 픽셀 표현 및 화려한 이펙트 추가)
         const player = {
             x: 100,
             y: 380,
@@ -155,24 +168,21 @@
             speed: 5,
             isGrounded: false,
             facing: 'right',
-            ultGauge: 0,       // 궁극기 게이지 (0 ~ 100)
+            ultGauge: 0,
             maxUltGauge: 100,
-            isChargingSkill: false,
-            afterImages: []    // 잔상 이펙트용
+            afterImages: []
         };
 
-        // 입력 처리
         window.addEventListener('keydown', e => keys[e.code] = true);
         window.addEventListener('keyup', e => keys[e.code] = false);
 
         startBtn.addEventListener('click', () => {
             startScreen.style.display = 'none';
-            document.getElementById('video-background').style.display = 'none'; // 시작 시 비디오 숨김
+            document.getElementById('video-background').style.display = 'none';
             gameRunning = true;
             gameLoop();
         });
 
-        // 화려한 파티클 생성 함수
         function createParticles(x, y, color, count, speedMultiplier = 1) {
             for (let i = 0; i < count; i++) {
                 particles.push({
@@ -188,16 +198,12 @@
             }
         }
 
-        // 스킬 사용 함수
         function triggerSkill() {
             createParticles(player.x + player.width / 2, player.y + player.height / 2, '#00e5ff', 30, 1.5);
             screenShakeTime = 10;
-            
-            // 궁극기 게이지 차오름
             player.ultGauge = Math.min(player.maxUltGauge, player.ultGauge + 25);
         }
 
-        // 궁극기 발동 함수
         function triggerUltimate() {
             if (player.ultGauge >= player.maxUltGauge) {
                 player.ultGauge = 0;
@@ -207,16 +213,13 @@
             }
         }
 
-        // 키 입력에 따른 스킬 및 동작 처리
         window.addEventListener('keydown', (e) => {
             if (!gameRunning) return;
-
-            if (e.code === 'KeyZ') triggerSkill();      // Z키: 화려한 기본 스킬
-            if (e.code === 'KeyX') triggerUltimate();   // X키: 궁극기
+            if (e.code === 'KeyZ') triggerSkill();
+            if (e.code === 'KeyX') triggerUltimate();
         });
 
         function update() {
-            // 이동 로직
             if (keys['ArrowLeft'] || keys['KeyA']) {
                 player.vx = -player.speed;
                 player.facing = 'left';
@@ -227,26 +230,22 @@
                 player.vx = 0;
             }
 
-            // 점프
             if ((keys['ArrowUp'] || keys['KeyW'] || keys['Space']) && player.isGrounded) {
                 player.vy = -12;
                 player.isGrounded = false;
                 createParticles(player.x + player.width / 2, player.y + player.height, '#ffffff', 10);
             }
 
-            // 중력
             player.vy += 0.6;
             player.x += player.vx;
             player.y += player.vy;
 
-            // 바닥 충돌
             if (player.y >= 380) {
                 player.y = 380;
                 player.vy = 0;
                 player.isGrounded = true;
             }
 
-            // 잔상 이펙트 추가 (이동 시)
             if (Math.abs(player.vx) > 0) {
                 player.afterImages.push({
                     x: player.x,
@@ -256,13 +255,11 @@
                 });
             }
 
-            // 잔상 업데이트
             player.afterImages.forEach((img, index) => {
                 img.alpha -= 0.05;
                 if (img.alpha <= 0) player.afterImages.splice(index, 1);
             });
 
-            // 파티클 업데이트
             particles.forEach((p, index) => {
                 p.x += p.vx;
                 p.y += p.vy;
@@ -270,25 +267,22 @@
                 if (p.life <= 0) particles.splice(index, 1);
             });
 
-            // 화면 흔들림 감쇠
             if (screenShakeTime > 0) screenShakeTime--;
         }
 
         function drawPixelPlayer(x, y, facing) {
-            // 디테일한 픽셀 캐릭터 표현 (레이어별 픽셀 그리기)
-            ctx.fillStyle = '#ffcc99'; // 피부
+            ctx.fillStyle = '#ffcc99';
             ctx.fillRect(x + 8, y + 4, 16, 12);
 
-            ctx.fillStyle = '#333333'; // 머리카락
+            ctx.fillStyle = '#333333';
             ctx.fillRect(x + 6, y, 20, 8);
 
-            ctx.fillStyle = '#0055ff'; // 상의
+            ctx.fillStyle = '#0055ff';
             ctx.fillRect(x + 4, y + 16, 24, 18);
 
-            ctx.fillStyle = '#111111'; // 하의
+            ctx.fillStyle = '#111111';
             ctx.fillRect(x + 6, y + 34, 20, 14);
 
-            // 눈 (방향)
             ctx.fillStyle = '#ffffff';
             let eyeOffset = facing === 'right' ? 16 : 8;
             ctx.fillRect(x + eyeOffset, y + 8, 4, 4);
@@ -297,25 +291,21 @@
         }
 
         function drawUI() {
-            // UI: 궁극기 게이지 바 복원
             const barX = 30;
             const barY = 30;
             const barWidth = 200;
             const barHeight = 20;
 
-            // 테두리 및 배경
             ctx.fillStyle = '#222';
             ctx.fillRect(barX - 4, barY - 4, barWidth + 8, barHeight + 8);
             ctx.fillStyle = '#444';
             ctx.fillRect(barX, barY, barWidth, barHeight);
 
-            // 채워지는 게이지
             const currentWidth = (player.ultGauge / player.maxUltGauge) * barWidth;
             const gaugeColor = player.ultGauge >= player.maxUltGauge ? '#ff0055' : '#00e5ff';
             ctx.fillStyle = gaugeColor;
             ctx.fillRect(barX, barY, currentWidth, barHeight);
 
-            // 텍스트 UI
             ctx.fillStyle = '#ffffff';
             ctx.font = 'bold 12px Courier New';
             ctx.fillText(`ULTIMATE [X]: ${player.ultGauge}%`, barX, barY - 8);
@@ -330,24 +320,20 @@
         function render() {
             ctx.save();
 
-            // 화면 흔들림 효과 적용
             if (screenShakeTime > 0) {
                 let dx = (Math.random() - 0.5) * screenShakeTime;
                 let dy = (Math.random() - 0.5) * screenShakeTime;
                 ctx.translate(dx, dy);
             }
 
-            // 배경 클리어
             ctx.fillStyle = '#1a1d24';
             ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-            // 바닥 그리드 픽셀 연출
             ctx.fillStyle = '#2c313d';
             ctx.fillRect(0, 428, canvas.width, 112);
             ctx.fillStyle = '#00e5ff';
-            ctx.fillRect(0, 428, canvas.width, 2); // 네온 라인
+            ctx.fillRect(0, 428, canvas.width, 2);
 
-            // 잔상 표현
             player.afterImages.forEach(img => {
                 ctx.globalAlpha = img.alpha;
                 ctx.fillStyle = img.color;
@@ -355,10 +341,8 @@
             });
             ctx.globalAlpha = 1.0;
 
-            // 디테일 픽셀 플레이어 그리기
             drawPixelPlayer(player.x, player.y, player.facing);
 
-            // 파티클 그리기 (화려한 스킬 이펙트)
             particles.forEach(p => {
                 ctx.fillStyle = p.color;
                 ctx.globalAlpha = p.life;
@@ -368,7 +352,6 @@
 
             ctx.restore();
 
-            // UI 그리기는 화면 흔들림 영향 없이 고정
             drawUI();
         }
 
@@ -381,3 +364,6 @@
     </script>
 </body>
 </html>
+"""
+
+components.html(game_html, height=580, scrolling=False)
